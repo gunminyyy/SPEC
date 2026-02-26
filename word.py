@@ -4,17 +4,26 @@ import re
 from docx import Document
 from datetime import datetime
 import io
+import os
+import sys
 
-# --- 1. 텍스트 치환을 위한 헬퍼 함수 ---
+# --- 1. 경로 탐색 헬퍼 함수 ---
+def get_resource_path(relative_path):
+    """실행 파일(exe) 내부나 일반 파이썬 환경 모두에서 절대 경로를 찾습니다."""
+    try:
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
+
+# --- 2. 텍스트 치환 헬퍼 함수 ---
 def replace_text_in_doc(doc, replacements):
     """워드 문서 내의 단락과 표에서 지정된 텍스트를 찾아 바꿉니다."""
-    # 일반 단락 검사
     for p in doc.paragraphs:
         for old_text, new_text in replacements.items():
             if old_text in p.text:
                 p.text = p.text.replace(old_text, new_text)
     
-    # 표(Table) 내부 검사
     for table in doc.tables:
         for row in table.rows:
             for cell in row.cells:
@@ -23,10 +32,9 @@ def replace_text_in_doc(doc, replacements):
                         if old_text in p.text:
                             p.text = p.text.replace(old_text, new_text)
 
-# --- 2. Streamlit UI 구성 ---
+# --- 3. Streamlit UI 구성 ---
 st.title("📄 PDF to Word 자동 변환기")
 
-# 상단: 좌우 2단 분할
 col1, col2 = st.columns(2)
 
 with col1:
@@ -40,13 +48,12 @@ with col2:
 
 st.divider()
 
-# 하단: 좌우 2단 분할 (버튼 영역)
 col3, col4 = st.columns(2)
 
 with col3:
     convert_btn = st.button("변환 실행", use_container_width=True)
 
-# --- 3. 데이터 추출 및 변환 로직 ---
+# --- 4. 데이터 추출 및 변환 로직 ---
 if convert_btn:
     if not uploaded_pdf:
         st.error("원본 PDF 파일을 업로드해주세요.")
@@ -55,7 +62,7 @@ if convert_btn:
     else:
         with st.spinner("파일을 변환하는 중입니다..."):
             try:
-                # 1. PDF 텍스트 추출
+                # PDF 텍스트 추출
                 pdf_text = ""
                 with pdfplumber.open(uploaded_pdf) as pdf:
                     for page in pdf.pages:
@@ -65,50 +72,53 @@ if convert_btn:
                 
                 replacements = {}
                 
-                # 2. 모드별 로직 (CFF 모드)
+                # 모드별 로직
                 if mode == "CFF":
-                    # 제품명 치환
                     replacements["ESTHETIC AROMA B"] = product_name
                     
-                    # COLOR 추출
                     color_match = re.search(r'COLOR\s*:(.*?)APPEARANCE\s*:', pdf_text, re.DOTALL | re.IGNORECASE)
                     if color_match:
                         color_val = color_match.group(1).strip().upper()
                         replacements["PALE YELLOW TO YELLOW"] = color_val
                     
-                    # SPECIFIC GRAVITY 앞숫자 추출 및 계산
                     sg_match = re.search(r'SPECIFIC GRAVITY.*?\(\d+°C\)\s*:\s*([\d\.]+)\s*[±\+/-]\s*[\d\.]+', pdf_text, re.IGNORECASE)
                     if sg_match:
                         sg_base = float(sg_match.group(1))
                         sg_new_val = f"{sg_base - 0.01:.3f} ~ {sg_base + 0.01:.3f}"
                         replacements["0.902 ~ 0.922"] = sg_new_val
                         
-                    # REFRACTIVE INDEX 앞숫자 추출 및 계산
                     ri_match = re.search(r'REFRACTIVE INDEX.*?\(\d+°C\)\s*:\s*([\d\.]+)\s*[±\+/-]\s*[\d\.]+', pdf_text, re.IGNORECASE)
                     if ri_match:
                         ri_base = float(ri_match.group(1))
                         ri_new_val = f"{ri_base - 0.01:.3f} ~ {ri_base + 0.01:.3f}"
                         replacements["1.466 ~ 1.476"] = ri_new_val
                         
-                    # 날짜 변환 (예: 26. FEB. 2026)
                     current_date = datetime.now().strftime("%d. %b. %Y").upper()
                     replacements["07. OCT. 2024"] = current_date
 
-                # 3. 워드 템플릿 불러오기 및 텍스트 치환
-                # 깃허브에 올린 템플릿 파일 경로를 지정합니다.
-                doc_path = "templates/company_form.docx"
+                elif mode == "HP":
+                    # TODO: HP 모드 로직 작성
+                    st.info("HP 모드 로직이 아직 구현되지 않았습니다.")
+                    replacements["ESTHETIC AROMA B"] = product_name # 기본 임시 로직
+                    
+                elif mode == "HPD":
+                    # TODO: HPD 모드 로직 작성
+                    st.info("HPD 모드 로직이 아직 구현되지 않았습니다.")
+                    replacements["ESTHETIC AROMA B"] = product_name # 기본 임시 로직
+
+                # 워드 템플릿 불러오기 및 텍스트 치환 (spec.docx 적용)
+                doc_path = get_resource_path("templates/spec.docx")
                 doc = Document(doc_path)
                 
                 replace_text_in_doc(doc, replacements)
                 
-                # 4. 결과물을 메모리 버퍼에 저장 (다운로드를 위해)
+                # 결과물 저장 및 다운로드
                 bio = io.BytesIO()
                 doc.save(bio)
                 bio.seek(0)
                 
                 st.success("변환이 완료되었습니다! 우측에서 다운로드하세요.")
                 
-                # 우측 하단에 다운로드 버튼 표시
                 with col4:
                     st.download_button(
                         label="결과물 다운로드 (.docx)",
@@ -120,4 +130,4 @@ if convert_btn:
             
             except Exception as e:
                 st.error(f"오류가 발생했습니다: {e}")
-                st.info("PDF 파일의 텍스트 구조가 예상과 다르거나, 양식 파일을 찾을 수 없는 경우일 수 있습니다.")
+                st.info("템플릿 폴더에 spec.docx 파일이 있는지 확인해주세요.")
