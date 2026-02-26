@@ -79,7 +79,7 @@ if convert_btn:
                     ri_match = re.search(r'REFRACTIVE INDEX.*?\(\d+°C\)\s*:\s*([\d\.]+)\s*[±\+/-]\s*[\d\.]+', pdf_text, re.IGNORECASE)
                     if ri_match:
                         ri_base = float(ri_match.group(1))
-                        context["RI"] = f"{ri_base - 0.01:.3f} ~ {ri_base + 0.01:.3f}"
+                        context["RI"] = f"{ri_base - 0.005:.3f} ~ {ri_base + 0.005:.3f}"
 
                 elif mode == "HP":
                     # TODO: HP 모드 로직 작성
@@ -115,4 +115,3 @@ if convert_btn:
             except Exception as e:
                 st.error(f"오류가 발생했습니다: {e}")
                 st.info("템플릿 폴더에 태그가 적용된 spec.docx 파일이 있는지 확인해주세요.")
-
